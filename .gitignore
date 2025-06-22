@@ -1,0 +1,6 @@
+stockfish
+*.csv
+*.zip
+*.json
+*.txt
+output
