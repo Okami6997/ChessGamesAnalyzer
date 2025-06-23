@@ -7,6 +7,7 @@ import io
 import json
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 
 class GameAnalyzer:
@@ -101,8 +102,13 @@ class GameAnalyzer:
         board = game.board()
         analysis_data = []
 
+        # Prepare moves for progress bar
+        moves = list(game.mainline_moves())
+        total_moves = len(moves)
+        move_pbar = tqdm(moves, total=total_moves, desc=f"Analyzing game {game_id if game_id else 'Unknown'}", leave=False, unit="moves")
+
         # Analyze Each Move
-        for move in game.mainline_moves():
+        for move in move_pbar:
             score_before = self.evaluate_board(board)
             actual_uci = move.uci()
             self.stockfish.set_fen_position(board.fen())
@@ -125,6 +131,8 @@ class GameAnalyzer:
                     "Classification": label,
                 }
             )
+            move_pbar.set_postfix({"Last Move": san, "Classification": label})
+        move_pbar.close()
         print(f'Analysis complete for game {game_id} converting to df')
         # Create DataFrame
         df = pd.DataFrame(analysis_data)
@@ -134,9 +142,8 @@ class GameAnalyzer:
         df["Player2Elo"] = black_elo
         df["GameID"] = game_id
         df["Game_URL"] = site
-        # group by df["GameID"]
-
-        # df = df.groupby('GameID')
+        # group by GameID
+        df = df.groupby('GameID').mean().reset_index()
         # print(df)
         return df
 
@@ -208,22 +215,25 @@ def main():
 
     if data:
         results = []
+        total_games = len(data)
+        game_pbar = tqdm(total=total_games, desc="Total Games", unit="games")
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
             future_to_game = {
                 executor.submit(analyzer.process_game_string, game): game
                 for game in data
             }
             print(f"Analyzing {len(data)} games with {args.workers} workers...")
-            for i, future in enumerate(as_completed(future_to_game)):
+            for future in as_completed(future_to_game):
                 try:
                     result_df = future.result()
                     if result_df is not None:
                         results.append(result_df)
-                    print(f"Processed game {i + 1}/{len(data)}")
+                    game_pbar.update(1)
                 except Exception as e:
                     game_id = future_to_game[future]
                     print(f"Error processing a game ({game_id[:30]}...): {e}")
-
+                    game_pbar.update(1)
+        game_pbar.close()
         if results:
             df = pd.concat(results).reset_index(drop=True)
             df.to_csv(args.output_file, index=False)
