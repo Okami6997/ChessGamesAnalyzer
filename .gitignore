@@ -3,3 +3,6 @@ stockfish
 *.zip
 *.json
 output
+
+*/__pycache__/
+.env
