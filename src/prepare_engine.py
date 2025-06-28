@@ -4,8 +4,6 @@ import shutil
 import subprocess
 import time
 import argparse
-import requests
-from bs4 import BeautifulSoup
 
 # download the file in output directory
 def download_stockfish():
