@@ -72,8 +72,42 @@ def unzip_lc0():
             break
     return True
 
+def download_stockfish_and_lc0_for_linux():
+    output_dir = os.path.join(os.path.dirname(__file__), '..', 'output')
+    stockfish_dir = os.path.join(output_dir, 'stockfish')
+    lc0_dir = os.path.join(output_dir, 'lc0')
+    if not os.path.exists(stockfish_dir):
+        os.mkdir(stockfish_dir)
+    if not os.path.exists(lc0_dir):
+        os.mkdir(lc0_dir)
+    # Download Stockfish for Linux
+    try:
+        result = subprocess.run([
+            "curl", "-L", "-C", "-", 
+            "-o", os.path.join(output_dir, 'stockfish.zip'),
+            "https://github.com/official-stockfish/Stockfish/releases/latest/download/stockfish-linux-x86-64-avx2.zip"
+        ], check=True)
+        print("Download successful (Stockfish)")
+        return True
+    except subprocess.CalledProcessError as e:
+        print("Download failed (Stockfish):", e)
+        return False
+    # Download Lc0 for Linux
+    try:
+        result = subprocess.run([
+            "curl", "-L", "-C", "-", 
+            "-o", os.path.join(output_dir, 'lc0.zip'),
+            "https://github.com/LeelaChessZero/lc0/releases/download/v0.31.2/lc0-v0.31.2-windows-cpu-dnnl.zip"
+        ], check=True)
+        print("Download successful (Lc0)")
+        return True
+    except subprocess.CalledProcessError as e:
+        print("Download failed (Lc0):", e)
+        return False
+    
+
 def main():
-    parser = argparse.ArgumentParser(description="Prepare chess engine (Stockfish or Lc0)")
+    parser = argparse.ArgumentParser(description="Prepare chess engine for Windows environment")
     parser.add_argument('engine', choices=['stockfish', 'lc0'], help="Which engine to prepare: 'stockfish' or 'lc0'")
     args = parser.parse_args()
 
