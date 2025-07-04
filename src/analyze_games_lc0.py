@@ -228,9 +228,9 @@ def main():
     )
     parser.add_argument(
         "-o",
-        "--output_file",
-        default="output/chess_analysis_lc0.csv",
-        help="Path to save the output CSV file.",
+        "--output_dir",
+        default="output/chess_analysis_lc0",
+        help="Directory to save per-game analysis CSVs.",
     )
     parser.add_argument(
         "--lc0_path",
@@ -268,35 +268,41 @@ def main():
     if not os.path.exists(args.input_file):
         print(f"Error: Input file not found at {args.input_file}")
         return
+    os.makedirs(args.output_dir, exist_ok=True)
     with open(args.input_file, "r") as f:
         data = json.load(f)
+    def get_game_id(game_str):
+        pgn_io = io.StringIO(game_str)
+        game = chess.pgn.read_game(pgn_io)
+        site = game.headers.get("Link", "")
+        if "chess.com" in site or "lichess.org" in site:
+            return site.rstrip("/").split("/")[-1]
+        return None
     if data:
-        results = []
         total_games = len(data)
         game_pbar = tqdm(total=total_games, desc="Total Games", unit="games")
+        def process_and_save(game_str):
+            game_id = get_game_id(game_str)
+            if not game_id:
+                print("[WARN] Could not extract game_id, skipping.")
+                return False
+            out_path = os.path.join(args.output_dir, f"{game_id}.csv")
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                # Already processed
+                return False
+            result_df = analyzer.process_game_string(game_str)
+            if result_df is not None:
+                result_df.to_csv(out_path, index=False)
+                return True
+            return False
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
-            future_to_game = {
-                executor.submit(analyzer.process_game_string, game): game
-                for game in data
-            }
-            print(f"Analyzing {total_games} games with {args.workers} workers using Lc0...")
-            for future in as_completed(future_to_game):
-                try:
-                    result_df = future.result()
-                    if result_df is not None:
-                        results.append(result_df)
-                    game_pbar.update(1)
-                except Exception as e:
-                    game_id = future_to_game[future]
-                    print(f"Error processing a game ({str(game_id)[:30]}...): {e}")
-                    game_pbar.update(1)
+            futures = [executor.submit(process_and_save, game) for game in data]
+            for future in as_completed(futures):
+                game_pbar.update(1)
         game_pbar.close()
-        if results:
-            df = pd.concat(results).reset_index(drop=True)
-            df.to_csv(args.output_file, index=False)
-            print(f"\nAnalysis complete. Results saved to {args.output_file}")
-        else:
-            print("\nNo games were successfully analyzed.")
+        print(f"Analysis complete. Per-game CSVs saved in {args.output_dir}")
+    else:
+        print("No games were successfully analyzed.")
 
 if __name__ == "__main__":
     main()
